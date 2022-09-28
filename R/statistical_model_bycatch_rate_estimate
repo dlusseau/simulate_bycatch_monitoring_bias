@@ -1,0 +1,69 @@
+
+library(glmmTMB)
+THEDATA<-read.csv("C:/Users/davlu/OneDrive - Danmarks Tekniske Universitet/WGBYC/table_5.5_withCountryAndYear_v3.csv",header=T)
+names(THEDATA)[1]<-"Ecoregion"
+THEDATA.yr<-subset(THEDATA,Year>2016&Year<2022)
+
+THEDATA.yr.mam.aves<-subset(THEDATA.yr,classname=="Mammalia"|classname=="Aves")
+
+THEDATA.yr.mam.aves$Total_No_Specimens<-as.numeric(THEDATA.yr.mam.aves$Total_No_Specimens)
+THEDATA.yr.mam.aves$Total_Observed_Effort<-as.numeric(THEDATA.yr.mam.aves$Total_Observed_Effort)
+THEDATA.yr.mam.aves$Incidents<-as.numeric(THEDATA.yr.mam.aves$Incidents)
+THEDATA.yr.mam.aves$Fishing_Effort<-as.numeric(THEDATA.yr.mam.aves$Fishing_Effort)
+
+
+
+EcoRegion<-unique(THEDATA.yr.mam.aves$Ecoregion)
+Species<-unique(THEDATA.yr.mam.aves$Species)
+metier<-unique(THEDATA.yr.mam.aves$Metier4)
+
+byc.rate.df<-data.frame(Ecoregion=rep(EcoRegion,each=(length(metier)*length(Species))),metier=rep(rep(metier,length(EcoRegion)),each=length(Species)),Species=rep(Species,(length(EcoRegion)*length(metier))),fishing=NA,monitoring=0,rate.est=NA,rate=NA,rate.SE=NA,year.var=NA,country.var=NA,resid.var=NA,problem=FALSE)
+
+for (i in 1:dim(byc.rate.df)[1]) {
+
+if (sum(THEDATA.yr.mam.aves$Total_Observed_Effort[THEDATA.yr.mam.aves$Ecoregion==byc.rate.df$Ecoregion[i]&THEDATA.yr.mam.aves$Species==byc.rate.df$Species[i]&THEDATA.yr.mam.aves$Metier==byc.rate.df$metier[i]])>0) {
+
+byc.rate.df$monitoring[i]<-sum(THEDATA$Total_Observed_Effort[THEDATA.yr.mam.aves$Ecoregion==byc.rate.df$Ecoregion[i]&THEDATA.yr.mam.aves$Species==byc.rate.df$Species[i]&THEDATA.yr.mam.aves$Metier==byc.rate.df$metier[i]])
+
+temp<-subset(THEDATA.yr.mam.aves, Metier4==byc.rate.df$metier[i]&Ecoregion==byc.rate.df$Ecoregion[i]&Species==byc.rate.df$Species[i])
+temp$rate.est<-temp$Total_No_Specimens/temp$Total_Observed_Effort
+byc.rate.df$rate.est[i]<-sum(temp$Total_No_Specimens)/sum(temp$Total_Observed_Effort)
+byc.rate.df$fishing[i]<-sum(temp$Fishing_Effort)
+
+if (dim(temp)[1]==1) {
+	byc.rate.df$rate[i]<-temp$rate.est
+	} else if (length(unique(temp$Country))>1&length(unique(temp$Year))>1) {
+
+glm0<-glmmTMB(rate.est~1+(1|Country)+(1|Year), data=temp,family=gaussian)
+
+byc.rate.df$rate[i]<-summary(glm0)$coefficients$cond[1]
+byc.rate.df$rate.SE[i]<-summary(glm0)$coefficients$cond[2]
+byc.rate.df$year.var[i]<-summary(glm0)$varcor$cond$Year[1]
+byc.rate.df$country.var[i]<-summary(glm0)$varcor$cond$Country[1]
+byc.rate.df$resid.var[i]<-summary(glm0)$sigma[1]
+byc.rate.df$problem[i]<-is.na(AIC(glm0))
+
+} else {
+
+glm0<-glmmTMB(rate.est~1, weights=log(Total_Observed_Effort),data=temp,family=gaussian)
+byc.rate.df$rate[i]<-summary(glm0)$coefficients$cond[1]
+byc.rate.df$rate.SE[i]<-summary(glm0)$coefficients$cond[2]
+byc.rate.df$resid.var[i]<-summary(glm0)$sigma[1]
+byc.rate.df$problem[i]<-is.na(AIC(glm0))
+
+} 
+# so of course monitoring is effort in days and n is the number of bycaught animals, those are on different units
+# and can yield rates>1, hence we are going to fit to rate directly
+
+## note that there is now a model validation process. in the first step, it is useful to assess what validation issues next
+
+} 
+
+print(i)
+flush.console()
+} #i
+
+### only keeping situation where we have monitoring
+
+byc.rate.df.kept<-subset(byc.rate.df,monitoring>0)
+
