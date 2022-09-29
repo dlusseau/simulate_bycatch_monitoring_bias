@@ -113,3 +113,90 @@ monitor_estimate<-rbind(monitor_estimate,temp)
 }
 
 
+###########################################################################################################################################################
+###########################################################################################################################################################
+###########################################################################################################################################################
+### VERSION 2: introducing between boat variability in both fishing and monitoring
+### 29 September 2022
+
+make_fishing_year<-function(mean.bycatch.event=1,mean.bycatch.large.event=20,p.large.event=0.01,
+							nboat=100,mean.fishing.event.boat.day=2,p.bycatch=0.1,stochastic=TRUE) {
+#we first only deal with one metier at a time
+#bycatch is not affected by vessel characteeristics
+#later we can for example introduce vessel size for each boat 
+# and influence probabilities by vessel size
+#and subsequently influence monitoring by vessel size
+
+fishing.day<-1:365
+fleet<-1:nboat							
+if (stochastic==TRUE) {
+
+mean.fishing.event.boat.day<-rtpois(nboat,mean.fishing.event.boat.day,a=0)  #introduce stochasticity so that the mean number of events per boats vary
+fishing.event.per.boat<-rpois(nboat,mean.fishing.event.boat.day)
+
+} else {
+fishing.event.per.boat<-rpois(nboat,mean.fishing.event.boat.day) #uniform fishing behaviour
+
+}
+
+i=1
+fishing<-data.frame(fishing.day=fishing.day[i],boat=rep(fleet,fishing.event.per.boat),bycatch=rbinom(sum(fishing.event.per.boat),1,p.bycatch),nbycatch=0)
+event.type<-rbinom(sum(fishing$bycatch),1,p.large.event)
+fishing$nbycatch[fishing$bycatch==1]<-apply(cbind((1-event.type)*rtpois(sum(fishing$bycatch),mean.bycatch.event,a=0),event.type*rtpois(sum(fishing$bycatch),mean.bycatch.large.event,a=0)),1,max)
+
+
+for (i in 2:365) {
+
+if (stochastic==TRUE) {
+mean.fishing.event.boat.day<-rtpois(nboat,mean.fishing.event.boat.day,a=0)  #introduce stochasticity so that the mean number of events per boats vary
+fishing.event.per.boat<-rpois(nboat,mean.fishing.event.boat.day)
+} else {
+fishing.event.per.boat<-rpois(nboat,mean.fishing.event.boat.day) #uniform fishing behaviour
+}
+
+temp<-data.frame(fishing.day=fishing.day[i],boat=rep(fleet,fishing.event.per.boat),bycatch=rbinom(sum(fishing.event.per.boat),1,p.bycatch),nbycatch=0)
+event.type<-rbinom(sum(temp$bycatch),1,p.large.event)
+temp$nbycatch[temp$bycatch==1]<-apply(cbind((1-event.type)*rtpois(sum(temp$bycatch),mean.bycatch.event,a=0),event.type*rtpois(sum(temp$bycatch),mean.bycatch.large.event,a=0)),1,max)
+
+fishing<-rbind(fishing,temp)
+
+}
+
+return(fishing)
+}
+
+
+
+monitor_BPUE<-function(pmonitor=0.5,nsample=1000,BPUE_real=0,fishing=NA, p_monitor_boat=.1,boat_samp=TRUE) {
+
+BPUE_est<-array(nsample)
+
+for (i in 1:nsample) {
+
+if (boat_samp==TRUE) {
+monitored<-sample(c(1:dim(fishing)[1]),floor(pmonitor*dim(fishing)[1]),replace=FALSE) # sample without replacement
+BPUE_est[i]<-(sum(fishing$nbycatch[monitored])/length(monitored))
+} else {
+boat_sampled<-sample(1:max(fishing$boat),n=floor(max(fishing$boat)*p_monitor_boat),replace=FALSE)
+fleet_sampled<-fishing[fishing$boat%in%boat_sampled,]
+monitored<-sample(c(1:dim(fleet_sampled)[1]),floor(pmonitor*dim(fleet_sampled)[1]),replace=FALSE) # sample without replacement
+BPUE_est[i]<-(sum(fleet_sampled$nbycatch[monitored])/length(monitored))
+}
+
+}
+BPUE_est_mean<-mean(BPUE_est)
+BPUE_est_CV<-sd(BPUE_est)/mean(BPUE_est)
+
+return(list(BPUE_est=BPUE_est_mean,CV=BPUE_est_CV))
+}
+
+
+
+
+
+
+
+###########################################################################################################################################################
+###########################################################################################################################################################
+###########################################################################################################################################################
+###########################################################################################################################################################
