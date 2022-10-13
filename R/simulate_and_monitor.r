@@ -119,6 +119,7 @@ monitor_estimate<-rbind(monitor_estimate,temp)
 ### VERSION 2: introducing between boat variability in both fishing and monitoring
 ### 29 September 2022
 
+
 make_fishing_year<-function(mean.bycatch.event=1,mean.bycatch.large.event=20,p.large.event=0.01,
 							nboat=100,mean.fishing.event.boat.day=2,p.bycatch=0.1,stochastic=TRUE) {
 #we first only deal with one metier at a time
@@ -166,18 +167,17 @@ return(fishing)
 }
 
 
-
 monitor_BPUE<-function(pmonitor=0.5,nsample=1000,BPUE_real=0,fishing=NA, p_monitor_boat=.1,boat_samp=TRUE) {
 
 BPUE_est<-array(nsample)
 
 for (i in 1:nsample) {
 
-if (boat_samp==TRUE) {
+if (boat_samp==FALSE) {
 monitored<-sample(c(1:dim(fishing)[1]),floor(pmonitor*dim(fishing)[1]),replace=FALSE) # sample without replacement
 BPUE_est[i]<-(sum(fishing$nbycatch[monitored])/length(monitored))
 } else {
-boat_sampled<-sample(1:max(fishing$boat),n=floor(max(fishing$boat)*p_monitor_boat),replace=FALSE)
+boat_sampled<-sample(1:max(fishing$boat),ceiling(max(fishing$boat)*p_monitor_boat),replace=FALSE)
 fleet_sampled<-fishing[fishing$boat%in%boat_sampled,]
 monitored<-sample(c(1:dim(fleet_sampled)[1]),floor(pmonitor*dim(fleet_sampled)[1]),replace=FALSE) # sample without replacement
 BPUE_est[i]<-(sum(fleet_sampled$nbycatch[monitored])/length(monitored))
